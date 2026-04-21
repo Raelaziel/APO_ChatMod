@@ -1,124 +1,174 @@
-# APO Windrose Chat Mod
 
-Simple UE4SS Lua chat mod for Windrose multiplayer.
+Production package for the Windrose chat mod.
+!! THIS MOD WAS TESTED ON LOCAL MACHINE WITH NO MORE THEN 2 OTHER PLAYERS !!
 
-## What It Does
+This build is the **server-side UE4SS transport** version:
 
-- Adds a basic chat command path: player -> server -> all connected players.
-- Supports `chat <message>` and `wrchat <message>`.
-- Writes server-side chat history to `WindroseChat/chat_server.log`.
-- Mirrors the newest received chat line through the game's native side notification.
+- players do **not** need client-side UE4SS
+- the client runs only `WindroseChatOverlay.exe`
+- the dedicated server runs one UE4SS C++ mod: `WindroseChatServerCpp`
+- chat transport is HTTP:
+  - client overlay -> server UE4SS C++ endpoint
+  - server endpoint -> client overlay feed
 
-## Current UI Limitation
+## Folder Layout
 
-The in-game notification mirror is intentionally single-line only.
-
-Multiline/native stacked chat was tested through multiple native notification widgets and caused client crashes on repeated messages. The stable release therefore shows only the latest line in the HUD notification while the full server log remains available on the dedicated server.
-
-## Release Folders
-
-```text
-client/
-  WindroseChat/
-    Config/
-    Scripts/main.lua
-    README.md
-
-server/
-  WindroseChat/
-    Config/
-    Scripts/main.lua
-    README.md
-
-source/
-  Config/
-  Scripts/main.lua
-  README.md
-```
+- `client`
+  Ready-to-copy files for the normal game client.
+- `dedicated-server`
+  Ready-to-copy files for the dedicated server with UE4SS installed.
+- `source`
+  Source snapshot for the overlay, legacy client UE4SS bridge, Lua transport, and new server UE4SS C++ endpoint.
 
 ## Client Install
 
 Copy:
 
 ```text
-E:\APO_ChatMod\client\WindroseChat
+...\client\R5\Binaries\Win64\...
 ```
 
-to the client UE4SS mods folder:
+into:
 
 ```text
-<Windrose>\R5\Binaries\Win64\ue4ss\Mods\WindroseChat
+...\SteamLibrary\steamapps\common\Windrose\R5\Binaries\Win64\...
 ```
 
-Enable it in:
+Required client files:
+
+- `WindroseChatOverlay.exe`
+- `WRChat_Client.ini`
+
+Client UE4SS is not required in this build.
+
+Edit:
 
 ```text
-<Windrose>\R5\Binaries\Win64\ue4ss\Mods\mods.txt
+R5\Binaries\Win64\WRChat_Client.ini
 ```
 
-Add or update:
+For local testing on the same machine:
 
-```text
-WindroseChat : 1
+```ini
+[Client]
+ServerUrl=http://127.0.0.1:8765
 ```
 
-## Server Install
+For LAN/public server:
+
+```ini
+[Client]
+ServerUrl=http://SERVER_IP_OR_DNS:8765
+; PlayerName=OptionalDisplayName
+```
+
+If `PlayerName` is empty, the overlay tries to resolve the active Windrose identity locally from save data and logs.
+
+## Dedicated Server Install
+
+This requires UE4SS installed on the dedicated server.
 
 Copy:
 
 ```text
-E:\APO_ChatMod\server\WindroseChat
+...\dedicated-server\R5\Binaries\Win64\...
 ```
 
-to the dedicated server UE4SS mods folder:
+into:
 
 ```text
-<Windrose Dedicated Server>\R5\Binaries\Win64\ue4ss\Mods\WindroseChat
+...\SteamLibrary\steamapps\common\Windrose Dedicated Server\R5\Binaries\Win64\...
 ```
 
-Enable it in:
+Required server files:
+
+- `ue4ss/Mods/WindroseChatServerCpp/dlls/main.dll`
+- `ue4ss/Mods/WindroseChatServerCpp/WRChat_Server.ini`
+
+Then merge:
 
 ```text
-<Windrose Dedicated Server>\R5\Binaries\Win64\ue4ss\Mods\mods.txt
+dedicated-server\R5\Binaries\Win64\ue4ss\Mods\mods.txt.append.txt
 ```
 
-Add or update:
+into the server `mods.txt`.
+
+Required server entry:
 
 ```text
-WindroseChat : 1
+WindroseChatServerCpp : 1
 ```
 
-## Usage
+Server config:
 
-Open the UE4SS console and type:
+```ini
+[Server]
+Port=8765
+MaxMessages=200
+```
+
+The server endpoint listens on all interfaces:
 
 ```text
-chat hello everyone
+http://0.0.0.0:8765
 ```
 
-or:
+Open that port in firewall/router if clients connect from another machine.
+
+## Controls
+
+Client overlay controls:
+
+- `Enter`
+  Open chat input.
+- `Enter` again
+  Send the current message.
+- `Esc`
+  Cancel input.
+- `Shift` / `CapsLock`
+  Uppercase letters while typing.
+- `Mouse wheel`
+  Scroll chat history while input is open. The input view renders up to the last 10 chat lines at once.
+- `PageUp` / `PageDown`
+  Scroll chat history while input is open.
+- `Up` / `Down`
+  Step through older or newer chat lines while input is open.
+- `Home` / `End`
+  Jump to older or newest chat lines.
+
+## Server API
+
+The UE4SS C++ server mod exposes:
 
 ```text
-wrchat hello everyone
+GET /health
+GET /v1/chat/feed?since=<lastId>&accountId=<id>&sessionId=<session>
+GET /v1/chat/send?speaker=<name>&message=<text>&accountId=<id>&sessionId=<session>
 ```
 
-The server broadcasts the message to connected players.
+The feed format is plain text:
+
+```text
+id<TAB>unixTimestamp<TAB>speaker<TAB>message
+```
+
+## Current Limitations
+
+- The server now validates the active `AccountId + BLPlayerSessionId` pair from the live game session before accepting chat traffic.
+- This is session-bound verification, not a standalone public auth service.
+- If your hosting only allows `Content\Paks\~mods` and does not support UE4SS or extra executables, this server-side endpoint cannot run there.
 
 ## Logs
 
-On the dedicated server, chat is appended to:
+Client log:
 
 ```text
-R5\Binaries\Win64\ue4ss\Mods\WindroseChat\chat_server.log
+R5/Binaries/Win64/WindroseChatOverlayExternal.log
 ```
 
-Runtime files such as `chat_server.log` and `chat_overlay.txt` are not included in this release package.
-
-## Version
-
-Current bundled script version:
+Server logs:
 
 ```text
-0.3.10-side-single-stable
+R5/Binaries/Win64/ue4ss/Mods/WindroseChatServerCpp/dlls/WindroseChatServerCpp.log
+R5/Binaries/Win64/ue4ss/Mods/WindroseChatServerCpp/WindroseChatServer.log
 ```
-
